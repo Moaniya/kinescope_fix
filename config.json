@@ -1,0 +1,15 @@
+{
+    "n_m3u8dl_re": "./utils/N_m3u8DL-RE/N_m3u8DL-RE.exe",
+    "ffmpeg": "./utils/N_m3u8DL-RE/ffmpeg.exe",
+    "mkvmerge": "./utils/mkvmerge/mkvmerge.exe",
+    "mp4decrypt": "./utils/mp4decrypt/mp4decrypt.exe",
+    "output_dir": "./downloads",
+    "temp_dir": "./temp",
+    "app_icon": "./icons/app.ico",
+    "logo_image": "./icons/logo.png",
+    "logo_width": 280,
+    "logo_height": 70,
+    "keep_temp_files": false,
+    "max_retries": 3,
+    "browser_profile": "chrome"
+}
