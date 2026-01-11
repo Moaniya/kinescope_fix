@@ -67,7 +67,8 @@ class DownloadThread(QThread):
                 mpd_url=self.mpd_url,
                 referrer=self.referrer,
                 quality=self.quality,
-                audio_lang=self.audio_lang
+                audio_lang=self.audio_lang,
+                drm_keys=self.drm_keys
             )
             
             self.finished_signal.emit(success)
@@ -99,7 +100,7 @@ class MainWindow(QMainWindow):
         """Инициализация интерфейса"""
         self.setWindowTitle("Kinescope Downloader")
         self.setWindowIcon(QIcon(self.config.app_icon))
-        self.setMinimumSize(900, 750)  # Увеличили ширину
+        self.setMinimumSize(900, 750)
         
         # Центральный виджет
         central_widget = QWidget()
@@ -197,7 +198,7 @@ class MainWindow(QMainWindow):
         mpd_layout.addWidget(self.mpd_edit)
         info_layout.addLayout(mpd_layout)
         
-        # M3U8 URL (добавим для информации)
+        # M3U8 URL
         m3u8_layout = QHBoxLayout()
         m3u8_label = QLabel("M3U8 URL:")
         m3u8_label.setFixedWidth(80)
@@ -288,6 +289,11 @@ class MainWindow(QMainWindow):
         self.download_btn.setEnabled(False)
         buttons_layout.addWidget(self.download_btn)
         
+        # Кнопка тестирования утилит
+        self.test_btn = QPushButton("Тест утилит")
+        self.test_btn.clicked.connect(self.test_utilities)
+        buttons_layout.addWidget(self.test_btn)
+        
         # Кнопка проверки утилит
         check_btn = QPushButton("Проверить утилиты")
         check_btn.clicked.connect(self.check_utilities)
@@ -338,6 +344,21 @@ class MainWindow(QMainWindow):
         self.audio_combo.setStyleSheet(STYLES["combo_box"])
         self.keep_temp_check.setStyleSheet(STYLES["check_box"])
     
+    def test_utilities(self):
+        """Тестирование работы утилит"""
+        self.log("🧪 Тестирование утилит...")
+        
+        if DOWNLOADER_AVAILABLE and VideoDownloader:
+            self.downloader = VideoDownloader(log_callback=self.log)
+            success = self.downloader.test_download()
+            
+            if success:
+                self.log("✅ Все утилиты работают корректно", "success")
+            else:
+                self.log("❌ Проблема с утилитами", "error")
+        else:
+            self.log("Загрузчик не доступен", "error")
+    
     def check_modules_availability(self):
         """Проверка доступности модулей"""
         if not JSON_PARSER_AVAILABLE:
@@ -367,9 +388,9 @@ class MainWindow(QMainWindow):
                 all_found = False
         
         if all_found:
-            self.log("Все необходимые утилиты найдены!", "success")
+            self.log("✅ Все необходимые утилиты найдены!", "success")
         else:
-            self.log("Некоторые утилиты не найдены. Разместите их в папке utils/", "error")
+            self.log("❌ Некоторые утилиты не найдены. Разместите их в папке utils/", "error")
     
     def browse_json_file(self):
         """Выбор JSON файла"""
@@ -505,20 +526,20 @@ class MainWindow(QMainWindow):
                 self.drm_keys = self.key_fetcher.get_keys(
                     mpd_url=mpd_url,
                     referrer=referrer,
-                    json_file_path=self.json_file_path  # <-- Передаем путь к JSON
+                    json_file_path=self.json_file_path
                 )
                 
                 if self.drm_keys:
-                    self.log(f"Получено {len(self.drm_keys)} ключей", "success")
+                    self.log(f"✅ Получено {len(self.drm_keys)} ключей", "success")
                     for key in self.drm_keys:
-                        self.log(f"Ключ: {key}")
+                        self.log(f"🔑 Ключ: {key}")
                     self.statusBar().showMessage(f"Получено {len(self.drm_keys)} ключей")
                 else:
-                    self.log("Не удалось получить ключи. Попробуйте скачать без них.", "warning")
+                    self.log("⚠️ Не удалось получить ключи. Попробуйте скачать без них.", "warning")
                     self.statusBar().showMessage("Ключи не получены")
                 
             except Exception as e:
-                self.log(f"Ошибка получения ключей: {str(e)}", "error")
+                self.log(f"❌ Ошибка получения ключей: {str(e)}", "error")
                 self.statusBar().showMessage("Ошибка получения ключей")
         else:
             # Эмуляция получения ключей
@@ -537,11 +558,11 @@ class MainWindow(QMainWindow):
     def finish_key_fetching(self, success=True):
         """Завершение получения ключей"""
         if success:
-            self.log("Ключи успешно получены! (эмуляция)", "success")
+            self.log("✅ Ключи успешно получены! (эмуляция)", "success")
             self.drm_keys = ["00000000000000000000000000000000:00000000000000000000000000000000"]  # Тестовый ключ
             self.statusBar().showMessage("Ключи получены (эмуляция)")
         else:
-            self.log("Не удалось получить ключи (эмуляция)", "warning")
+            self.log("⚠️ Не удалось получить ключи (эмуляция)", "warning")
             self.statusBar().showMessage("Ключи не получены")
     
     def download_video(self):
@@ -552,17 +573,30 @@ class MainWindow(QMainWindow):
         audio_lang = self.audio_combo.currentText()
         
         if not mpd_url:
-            self.log("Ошибка: Не заполнен MPD URL", "error")
+            self.log("❌ Ошибка: Не заполнен MPD URL", "error")
             return
         
         if not referrer:
-            self.log("Ошибка: Не заполнен Referrer", "error")
+            self.log("❌ Ошибка: Не заполнен Referrer", "error")
             return
+        
+        # Проверяем, есть ли ключи
+        if not hasattr(self, 'drm_keys') or not self.drm_keys:
+            reply = QMessageBox.question(
+                self,
+                'Ключи не получены',
+                'Ключи DRM не были получены. Видео будет скачано в зашифрованном виде и не будет воспроизводиться.\n\nПродолжить?',
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                return
         
         # Блокируем кнопки во время скачивания
         self.keys_btn.setEnabled(False)
         self.download_btn.setEnabled(False)
         self.parse_btn.setEnabled(False)
+        self.test_btn.setEnabled(False)
         self.progress_bar.setValue(0)
         self.statusBar().showMessage("Скачивание видео...")
         
@@ -576,7 +610,7 @@ class MainWindow(QMainWindow):
                     referrer=referrer,
                     quality=quality,
                     audio_lang=audio_lang,
-                    drm_keys=self.drm_keys if hasattr(self, 'drm_keys') else None
+                    drm_keys=self.drm_keys if hasattr(self, 'drm_keys') and self.drm_keys else []
                 )
                 
                 # Подключаем сигналы
@@ -588,14 +622,12 @@ class MainWindow(QMainWindow):
                 self.download_thread.start()
                 
             except Exception as e:
-                self.log(f"Ошибка запуска скачивания: {str(e)}", "error")
+                self.log(f"❌ Ошибка запуска скачивания: {str(e)}", "error")
                 self.unlock_buttons()
                 self.statusBar().showMessage("Ошибка скачивания")
         else:
             # Эмуляция скачивания
             self.log("Начало скачивания видео (эмуляция)...", "warning")
-            
-            # Имитируем прогресс скачивания
             self.simulate_progress()
     
     def simulate_progress(self):
@@ -620,10 +652,10 @@ class MainWindow(QMainWindow):
         """Завершение скачивания"""
         if success:
             self.progress_bar.setValue(100)
-            self.log("Видео успешно скачано!", "success")
+            self.log("✅ Видео успешно скачано!", "success")
             self.statusBar().showMessage("Видео скачано успешно")
         else:
-            self.log("Ошибка при скачивании видео", "error")
+            self.log("❌ Ошибка при скачивании видео", "error")
             self.statusBar().showMessage("Ошибка скачивания")
         
         # Разблокируем кнопки
@@ -643,13 +675,14 @@ class MainWindow(QMainWindow):
                 os.makedirs(temp_dir, exist_ok=True)
                 self.log("Временные файлы очищены")
         except Exception as e:
-            self.log(f"Ошибка очистки временных файлов: {e}", "warning")
+            self.log(f"⚠️ Ошибка очистки временных файлов: {e}", "warning")
     
     def unlock_buttons(self):
         """Разблокировка кнопок"""
         self.keys_btn.setEnabled(True)
         self.download_btn.setEnabled(True)
         self.parse_btn.setEnabled(True)
+        self.test_btn.setEnabled(True)
     
     def clear_all(self):
         """Очистка всех полей"""
